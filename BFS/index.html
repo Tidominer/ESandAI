@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sliding Puzzle Tree Viewer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+      text-align: center;
+    }
+
+    #address {
+      font-weight: bold;
+      margin-bottom: 15px;
+      font-size: 1.1em;
+    }
+
+    .tree-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .node-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    .table-container {
+      display: inline-block;
+      width: 140px;
+      transition: transform 0.2s ease-in-out;
+      vertical-align: top;
+      text-align: center;
+    }
+
+    .table-container:hover {
+      transform: scale(1.2);
+    }
+
+    table {
+      border-collapse: collapse;
+      margin: 5px auto;
+      width: 100%;
+    }
+
+    td {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #444;
+      text-align: center;
+      vertical-align: middle;
+    }
+
+    .x-cell {
+      background-color: #ccc;
+      color: transparent;
+    }
+
+    .changed-cell {
+      background-color: #eee;
+    }
+
+    .move-label {
+      font-size: 0.8em;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+
+    .table-name {
+      font-size: 0.9em;
+      margin-bottom: 3px;
+    }
+
+    .preview-box {
+      width: 15px;
+      height: 15px;
+      border: 1px solid #aaa;
+      background-color: #f9f9f9;
+      margin: 2px;
+    }
+
+    .child-previews {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+  <div id="address">Loading...</div>
+  <div class="tree-container">
+    <div id="current-node">Loading...</div>
+    <div id="child-nodes"></div>
+  </div>
+
+  <script>
+    // Track current path as array of segment strings (e.g., ['0', '1', '3'])
+    let path = ['0'];
+
+    // Get full path to current node's .txt file
+    function getCurrentNodePath(pathArray) {
+      return 'root/' + pathArray.join('/') + '.txt';
+    }
+
+    // Get full path to current node's directory
+    function getCurrentDirPath(pathArray) {
+      return 'root/' + pathArray.join('/') + '/';
+    }
+
+    // Load node data (name and 3x3 table)
+    async function loadNodeData(pathArray) {
+      const filePath = getCurrentNodePath(pathArray);
+      const res = await fetch(filePath);
+      if (!res.ok) throw new Error(`Failed to load ${filePath}`);
+      const text = await res.text();
+      const lines = text.split('\n').filter(l => l.trim() !== '');
+      const name = lines[0];
+      const table = lines.slice(1, 4).map(row =>
+        row.split(',').map(cell => cell.trim()).slice(0, 3)
+      );
+      return { name, table };
+    }
+
+    // Get list of existing child indices (1-4)
+    async function getChildren(pathArray) {
+      const dirPath = getCurrentDirPath(pathArray);
+      const existing = [];
+      for (let i = 1; i <= 4; i++) {
+        const childPath = dirPath + i + '.txt';
+        try {
+          const res = await fetch(childPath, { method: 'HEAD' });
+          if (res.ok) existing.push(i);
+        } catch (e) {
+          // Ignore errors, child does not exist
+        }
+      }
+      return existing;
+    }
+
+    // Load name of each ancestor to build address path
+    async function renderAddress(pathArray) {
+      const names = [];
+      let currentPath = [];
+      for (const seg of pathArray) {
+        currentPath = [...currentPath, seg];
+        const node = await loadNodeData(currentPath);
+        names.push(node.name);
+      }
+      document.getElementById('address').textContent = names.join(' > ');
+    }
+
+    // Main render function
+    async function render() {
+      const currentContainer = document.getElementById('current-node');
+      const childContainer = document.getElementById('child-nodes');
+      currentContainer.innerHTML = 'Loading...';
+      childContainer.innerHTML = '';
+
+      try {
+        const currentNode = await loadNodeData(path);
+        await renderAddress(path);
+
+        // Render current node
+        const tableContainer = document.createElement('div');
+        tableContainer.className = 'table-container';
+
+        const nameLabel = document.createElement('div');
+        nameLabel.className = 'table-name';
+        nameLabel.textContent = currentNode.name;
+
+        const table = document.createElement('table');
+        for (let r = 0; r < 3; r++) {
+          const tr = document.createElement('tr');
+          for (let c = 0; c < 3; c++) {
+            const td = document.createElement('td');
+            const val = currentNode.table[r][c];
+            if (val === 'x') {
+              td.className = 'x-cell';
+            } else {
+              td.textContent = val;
+            }
+            tr.appendChild(td);
+          }
+          table.appendChild(tr);
+        }
+
+        tableContainer.appendChild(nameLabel);
+        tableContainer.appendChild(table);
+        currentContainer.innerHTML = '';
+        currentContainer.appendChild(tableContainer);
+
+        // Render back button if there is a parent
+        if (path.length > 1) {
+          const parentPath = path.slice(0, -1);
+          const parentNode = await loadNodeData(parentPath);
+
+          const backContainer = document.createElement('div');
+          backContainer.className = 'table-container';
+          backContainer.style.cursor = 'pointer';
+          backContainer.onclick = () => {
+            path = parentPath;
+            render();
+          };
+
+          const backName = document.createElement('div');
+          backName.className = 'table-name';
+          backName.textContent = parentNode.name;
+
+          const backTable = document.createElement('table');
+          for (let r = 0; r < 3; r++) {
+            const tr = document.createElement('tr');
+            for (let c = 0; c < 3; c++) {
+              const td = document.createElement('td');
+              const val = parentNode.table[r][c];
+              if (val === 'x') {
+                td.className = 'x-cell';
+              } else {
+                td.textContent = val;
+                if (parentNode.table[r][c] === 'x') {
+                  td.classList.add('changed-cell');
+                }
+              }
+              tr.appendChild(td);
+            }
+            backTable.appendChild(tr);
+          }
+
+          backContainer.appendChild(backName);
+          backContainer.appendChild(backTable);
+
+          currentContainer.prepend(document.createElement('br'));
+
+          currentContainer.prepend(backContainer);
+        }
+
+        // Load and render children
+        const children = await getChildren(path);
+        const childNodesContainer = document.createElement('div');
+        childNodesContainer.className = 'node-row';
+
+        const moveLabels = ['Up', 'Right', 'Down', 'Left'];
+
+        for (const childIndex of children) {
+          const childPath = [...path, childIndex.toString()];
+          const childData = await loadNodeData(childPath);
+
+          // Load grandchildren count
+          const grandChildren = await getChildren(childPath);
+
+          const childContainerEl = document.createElement('div');
+          childContainerEl.className = 'table-container';
+          childContainerEl.style.cursor = 'pointer';
+          childContainerEl.onclick = () => {
+            path.push(childIndex.toString());
+            render();
+          };
+
+          // Move label
+          const moveLabel = document.createElement('div');
+          moveLabel.className = 'move-label';
+          moveLabel.textContent = moveLabels[childIndex - 1];
+
+          // Table name
+          const tableName = document.createElement('div');
+          tableName.className = 'table-name';
+          tableName.textContent = childData.name;
+
+          // Table
+          const tableEl = document.createElement('table');
+          for (let r = 0; r < 3; r++) {
+            const tr = document.createElement('tr');
+            for (let c = 0; c < 3; c++) {
+              const td = document.createElement('td');
+              const val = childData.table[r][c];
+              if (val === 'x') {
+                td.className = 'x-cell';
+              } else {
+                td.textContent = val;
+                if (currentNode.table[r][c] === 'x') {
+                  td.classList.add('changed-cell');
+                }
+              }
+              tr.appendChild(td);
+            }
+            tableEl.appendChild(tr);
+          }
+
+          // Grandchild preview boxes
+          const previewDiv = document.createElement('div');
+          previewDiv.className = 'child-previews';
+
+          for (let i = 0; i < grandChildren.length; i++) {
+            const box = document.createElement('div');
+            box.className = 'preview-box';
+            previewDiv.appendChild(box);
+          }
+
+          childContainerEl.appendChild(moveLabel);
+          childContainerEl.appendChild(tableName);
+          childContainerEl.appendChild(tableEl);
+          childContainerEl.appendChild(previewDiv);
+          childNodesContainer.appendChild(childContainerEl);
+        }
+
+        childContainer.appendChild(childNodesContainer);
+      } catch (err) {
+        console.error(err);
+        document.getElementById('container').textContent = 'Error loading data.';
+      }
+    }
+
+    // Start rendering
+    render();
+  </script>
+</body>
+</html>
