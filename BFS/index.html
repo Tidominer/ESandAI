@@ -116,8 +116,8 @@
     // Load node data (name and 3x3 table)
     async function loadNodeData(pathArray) {
       const filePath = getCurrentNodePath(pathArray);
-      const res = await fetch('/ESandAI/BFS/'+filePath);
-      if (!res.ok) throw new Error(`Failed to load ${'/ESandAI/BFS/'+filePath}`);
+      const res = await fetch('/'+filePath);
+      if (!res.ok) throw new Error(`Failed to load ${'/'+filePath}`);
       const text = await res.text();
       const lines = text.split('\n').filter(l => l.trim() !== '');
       const name = lines[0];
